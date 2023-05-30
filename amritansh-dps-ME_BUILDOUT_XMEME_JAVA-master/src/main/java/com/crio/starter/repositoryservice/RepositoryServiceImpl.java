@@ -1,0 +1,115 @@
+package com.crio.starter.repositoryservice;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
+import com.crio.starter.entities.PostEntity;
+import com.crio.starter.exceptions.PostNotFoundException;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.Sort.Direction;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.stereotype.Service;
+
+/**
+ * Service class that implements RepositoryService contract
+ */
+
+@Service
+public class RepositoryServiceImpl implements RepositoryService{
+    
+    @Autowired
+    private MongoTemplate mongoTemplate;
+
+    
+    /**
+     * Function to get the bottom 100 entities from the database
+     * @return List<PostEntity> posts
+     */
+    @Override
+    public List<PostEntity> getPosts() {
+
+        // Query to get the bottom 100 documents from the mongodb collection.
+        Query query = new Query().with(Sort.by(Direction.DESC, "id")).limit(100);
+        
+        List<PostEntity> posts = mongoTemplate.find(query, PostEntity.class, "userPosts");
+        
+      //  Collections.reverse(posts);
+
+        return posts;
+    }
+
+
+    /**
+     * This function gets a single PostEntity instance from database having the provided id and returns it
+     * @param long postId
+     * @return PostEntity
+     * @throws PostNotFoundException if there is no post with the given id in the database  
+     */
+    @Override
+    public PostEntity getPost(long postId) throws PostNotFoundException {
+        Query query = new Query(Criteria.where("id").is(postId));
+        PostEntity post = mongoTemplate.findOne(query, PostEntity.class, "userPosts");
+        if (post == null) throw new PostNotFoundException();
+        return post;
+    }
+
+
+    /**
+     * This function saves a PostEntity instance in the database.
+     * @return long postId - id of the saved instance
+     */
+    @Override
+    public long savePost(PostEntity post) {
+    
+        Query query = new Query().with(Sort.by(Direction.DESC, "id"));
+        List<PostEntity> posts = mongoTemplate.find(query, PostEntity.class, "userPosts");
+        if(!checkDuplicates(posts, post)){
+        PostEntity savedPost = mongoTemplate.save(post, "userPosts");
+        return savedPost.getId();
+        }else{
+            return -1;
+        }
+    }
+
+
+    private boolean checkDuplicates(List<PostEntity> memeEntities, PostEntity meme) {
+
+        //iterate over each meme to check name,url and caption are same or not.
+        for(PostEntity memeEntity: memeEntities) {
+            if(meme.getName().equals(memeEntity.getName()) && meme.getUrl().equals(memeEntity.getUrl()) &&
+            meme.getCaption().equals(memeEntity.getCaption())) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+
+    /**
+     * This function updates an existing post in the database.
+     * @param Map<String, Object> updates
+     * @param long postId
+     * @throws PostNotFoundException if the entity with the given id is not found in the database
+     */
+    @Override
+    public void updatePost(Map<String, Object> updates, long postId) throws PostNotFoundException{
+        Query query = new Query(Criteria.where("id").is(postId));
+        PostEntity post = mongoTemplate.findOne(query, PostEntity.class, "userPosts");
+        if (post == null) throw new PostNotFoundException();
+        
+        Object newUrl = updates.get("url");
+        Object newCaption = updates.get("caption");
+
+        if (newUrl != null) post.setUrl(newUrl.toString());
+        
+        if (newCaption != null) post.setCaption(newCaption.toString());
+
+        mongoTemplate.save(post);
+    }
+}
